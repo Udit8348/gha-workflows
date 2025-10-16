@@ -1,8 +1,8 @@
 name: Marketplace Action Demo
 
 on:
-    # can ignore unless debugging
-    workflow_dispatch:
+  # can ignore unless debugging
+  workflow_dispatch:
     inputs:
       build_from_scratch:
         description: "Build new .sif from .def?"
