@@ -34,6 +34,9 @@ Recall, `install_dependencies.sh` is system dependencies and was previously inst
 
 Optimally, the misc scripts and `install_dependencies.sh` are merged and pruned for overlap.
 
+### Pipelining Suggestions
+If you later want to download these same artifacts in a different workflow (e.g., multi-job pipeline), you can use. Would you like me to extend one of these workflows into a two-job version (where one job uploads these dependencies and another downloads + builds)? That’s the standard way to isolate build staging from container creation.
+
 
 ## Results
 
