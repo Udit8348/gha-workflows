@@ -1,70 +1,128 @@
-# Copyright © 2019-2023
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+name: Apptainer CI Pipeline
 
-name: CI
-
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  # ============================================================
+  # 1️⃣ SETUP STAGE
+  # ============================================================
   setup:
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
 
+    env:
+      APPTAINER_VERSION: "1.4.3"
+
     steps:
-      - name: Checkout code
+      - name: Checkout code (with submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Cache Toolchain Directory
+      # ------------------------------------------------------------
+      # Restore cached Apptainer image
+      # ------------------------------------------------------------
+      - name: Restore cached .sif image
+        id: cache-sif
+        uses: actions/cache@v4
+        with:
+          path: demo.sif
+          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+          restore-keys: |
+            sif-${{ runner.os }}-
+
+      # ------------------------------------------------------------
+      # Restore persistent caches (toolchain & third_party)
+      # ------------------------------------------------------------
+      - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
+          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
           restore-keys: |
-            ${{ matrix.os }}-toolchain-
+            toolchain-${{ matrix.os }}-
 
-      - name: Cache Third Party Directory
+      - name: Restore third_party cache
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
           restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+            thirdparty-${{ matrix.os }}-
 
-      - name: Install Dependencies
-        if: steps.cache-toolchain.outputs.cache-hit != 'true' || steps.cache-thirdparty.outputs.cache-hit != 'true'
+      # ------------------------------------------------------------
+      # Install Apptainer
+      # ------------------------------------------------------------
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
+
+      # ------------------------------------------------------------
+      # Build container (if cache miss)
+      # ------------------------------------------------------------
+      - name: Build container (if no cache hit)
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
-          sudo bash ./ci/install_dependencies.sh
+          echo "Cache miss — building demo.sif..."
+          apptainer build demo.sif container.def
 
+      # ------------------------------------------------------------
+      # Save .sif image to cache
+      # ------------------------------------------------------------
+      - name: Save .sif image to cache
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: demo.sif
+          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+
+      # ------------------------------------------------------------
+      # Build toolchain if missing
+      # ------------------------------------------------------------
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
+          echo "Cache miss: building toolchain..."
           TOOLDIR=$PWD/tools
           mkdir -p build
           cd build
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
 
-      - name: Setup Third Party
+      # ------------------------------------------------------------
+      # Build third_party if missing
+      # ------------------------------------------------------------
+      - name: Build Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
+          echo "Cache miss: building third_party..."
           make -C third_party > /dev/null
 
+      # ------------------------------------------------------------
+      # Save warm caches (if rebuilt)
+      # ------------------------------------------------------------
+      - name: Save updated toolchain cache
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tools
+          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
+
+      - name: Save updated third_party cache
+        if: steps.cache-thirdparty.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: third_party
+          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
+
+  # ============================================================
+  # 2️⃣ BUILD STAGE
+  # ============================================================
   build:
     needs: setup
     strategy:
@@ -73,41 +131,49 @@ jobs:
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
 
+    env:
+      APPTAINER_VERSION: "1.4.3"
+      GITHUB_WORKSPACE: ${{ github.workspace }}
+      APPTAINER_BASE_CMD: >
+        apptainer exec --cleanenv
+        --bind ${{ github.workspace }}:${{ github.workspace }}
+        --bind /home/runner:/home/runner
+        --pwd ${{ github.workspace }}
+        demo.sif
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo bash ./ci/install_dependencies.sh
-
-      - name: Cache Toolchain Directory
-        id: cache-toolchain
-        uses: actions/cache@v4
+      # Restore toolchain and third_party caches
+      - name: Restore toolchain cache
+        uses: actions/cache/restore@v4
         with:
           path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
+          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
           restore-keys: |
-            ${{ matrix.os }}-toolchain-
+            toolchain-${{ matrix.os }}-
 
-      - name: Cache Third Party Directory
-        id: cache-thirdparty
-        uses: actions/cache@v4
+      - name: Restore third_party cache
+        uses: actions/cache/restore@v4
         with:
           path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
+          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
           restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+            thirdparty-${{ matrix.os }}-
 
+      # Run build inside Apptainer container
       - name: Run Build
         run: |
-          TOOLDIR=$PWD/tools
-          mkdir -p build${{ matrix.xlen }}
-          cd build${{ matrix.xlen }}
-          ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
-          source ci/toolchain_env.sh
-          make software -s > /dev/null
-          make tests -s > /dev/null
+          $APPTAINER_BASE_CMD bash -c "
+            set -e
+            TOOLDIR=\$PWD/tools
+            mkdir -p build${{ matrix.xlen }}
+            cd build${{ matrix.xlen }}
+            ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+            source ../ci/toolchain_env.sh
+            make software -s
+            make tests -s
+          "
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -115,6 +181,9 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
+  # ============================================================
+  # 3️⃣ TEST STAGE
+  # ============================================================
   tests:
     needs: build
     strategy:
@@ -125,31 +194,26 @@ jobs:
         xlen: [32, 64]
     runs-on: ${{ matrix.os }}
 
+    env:
+      APPTAINER_VERSION: "1.4.3"
+      GITHUB_WORKSPACE: ${{ github.workspace }}
+      APPTAINER_BASE_CMD: >
+        apptainer exec --cleanenv
+        --bind ${{ github.workspace }}:${{ github.workspace }}
+        --bind /home/runner:/home/runner
+        --pwd ${{ github.workspace }}
+        demo.sif
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo bash ./ci/install_dependencies.sh
-
-      - name: Cache Toolchain Directory
-        id: cache-toolchain
-        uses: actions/cache@v4
+      - name: Restore caches
+        uses: actions/cache/restore@v4
         with:
-          path: tools
-          key: ${{ matrix.os }}-toolchain-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-toolchain-
-
-      - name: Cache Third Party Directory
-        id: cache-thirdparty
-        uses: actions/cache@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
+          path: |
+            tools
+            third_party
+          key: cache-${{ matrix.os }}
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
@@ -157,24 +221,29 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
-      - name: Run tests
+      - name: Run Tests inside container
         run: |
-          cd build${{ matrix.xlen }}
-          source ci/toolchain_env.sh
-          chmod -R +x . # Ensure all files have executable permissions
-          if [ "${{ matrix.name }}" == "regression" ]; then
-            ./ci/regression.sh --unittest
-            ./ci/regression.sh --isa
-            ./ci/regression.sh --kernel
-            ./ci/regression.sh --regression
-          else
-            ./ci/regression.sh --${{ matrix.name }}
-          fi
+          $APPTAINER_BASE_CMD bash -c "
+            set -e
+            cd build${{ matrix.xlen }}
+            source ../ci/toolchain_env.sh
+            chmod -R +x .
+            if [ '${{ matrix.name }}' = 'regression' ]; then
+              ./ci/regression.sh --unittest
+              ./ci/regression.sh --isa
+              ./ci/regression.sh --kernel
+              ./ci/regression.sh --regression
+            else
+              ./ci/regression.sh --${{ matrix.name }}
+            fi
+          "
 
+  # ============================================================
+  # 4️⃣ COMPLETION STAGE
+  # ============================================================
   complete:
     runs-on: ubuntu-22.04
     needs: tests
-
     steps:
       - name: Check Completion
-        run: echo "All matrix jobs passed"
+        run: echo "✅ All matrix jobs passed successfully."
