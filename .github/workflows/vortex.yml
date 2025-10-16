@@ -102,8 +102,10 @@ jobs:
       - name: Build Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          echo "Cache miss: building third_party..."
-          make -C third_party > /dev/null
+          echo "Cache miss: rebuilding third_party..."
+          git submodule update --init --recursive third_party
+          make -C third_party clean || true
+          make -C third_party -j$(nproc)
 
       - name: Save updated toolchain cache
         if: steps.cache-toolchain.outputs.cache-hit != 'true'

@@ -3,6 +3,7 @@ all: cvfpu softfloat ramulator
 cvfpu:
 
 softfloat:
+	@mkdir -p softfloat/build/Linux-x86_64-GCC
 	SPECIALIZE_TYPE=RISCV SOFTFLOAT_OPTS="-fPIC -DSOFTFLOAT_ROUND_ODD -DINLINE_LEVEL=5 -DSOFTFLOAT_FAST_DIV32TO16 -DSOFTFLOAT_FAST_DIV64TO32" $(MAKE) -C softfloat/build/Linux-x86_64-GCC
 
 ramulator/libramulator.so:
@@ -10,7 +11,7 @@ ramulator/libramulator.so:
 ramulator: ramulator/libramulator.so
 
 clean:
-	$(MAKE) -C softfloat/build/Linux-x86_64-GCC clean
+	$(MAKE) -C softfloat/build/Linux-x86_64-GCC clean || true
 	rm -rf ramulator/build ramulator/libramulator.so
 
-.PHONY: all cvfpu softfloat ramulator
+.PHONY: all cvfpu softfloat ramulator clean
