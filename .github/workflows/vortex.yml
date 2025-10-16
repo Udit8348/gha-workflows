@@ -1,12 +1,13 @@
-name: Apptainer CI Pipeline
+name: Apptainer CI Pipeline (Slim per OS)
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
   # ============================================================
-  # 1️⃣ SETUP STAGE
+  # 1️⃣ CONTAINER BUILD STAGE
+  # Builds one .sif per OS version and caches it
   # ============================================================
-  setup:
+  container-build:
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
@@ -16,26 +17,60 @@ jobs:
       APPTAINER_VERSION: "1.4.3"
 
     steps:
-      - name: Checkout code (with submodules)
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      # ------------------------------------------------------------
-      # Restore cached Apptainer image
-      # ------------------------------------------------------------
       - name: Restore cached .sif image
         id: cache-sif
         uses: actions/cache@v4
         with:
           path: demo.sif
-          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+          key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
           restore-keys: |
-            sif-${{ runner.os }}-
+            sif-${{ matrix.os }}-
 
-      # ------------------------------------------------------------
-      # Restore persistent caches (toolchain & third_party)
-      # ------------------------------------------------------------
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
+
+      - name: Build container (if no cache hit)
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        run: |
+          echo "Cache miss — rebuilding demo.sif..."
+          rm -f demo.sif
+          apptainer build demo.sif container.def
+
+      - name: Save .sif image to cache
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: demo.sif
+          key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+
+      - name: Upload .sif as artifact (for dependent jobs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: apptainer-image-${{ matrix.os }}
+          path: demo.sif
+
+  # ============================================================
+  # 2️⃣ SETUP STAGE
+  # Prepares toolchain and third_party with per-OS caches
+  # ============================================================
+  setup:
+    needs: container-build
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache@v4
@@ -54,36 +89,6 @@ jobs:
           restore-keys: |
             thirdparty-${{ matrix.os }}-
 
-      # ------------------------------------------------------------
-      # Install Apptainer
-      # ------------------------------------------------------------
-      - name: Install Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
-        with:
-          apptainer-version: ${{ env.APPTAINER_VERSION }}
-
-      # ------------------------------------------------------------
-      # Build container (if cache miss)
-      # ------------------------------------------------------------
-      - name: Build container (if no cache hit)
-        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
-        run: |
-          echo "Cache miss — building demo.sif..."
-          apptainer build demo.sif container.def
-
-      # ------------------------------------------------------------
-      # Save .sif image to cache
-      # ------------------------------------------------------------
-      - name: Save .sif image to cache
-        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
-        uses: actions/cache@v4
-        with:
-          path: demo.sif
-          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
-
-      # ------------------------------------------------------------
-      # Build toolchain if missing
-      # ------------------------------------------------------------
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
@@ -94,18 +99,12 @@ jobs:
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
 
-      # ------------------------------------------------------------
-      # Build third_party if missing
-      # ------------------------------------------------------------
       - name: Build Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           echo "Cache miss: building third_party..."
           make -C third_party > /dev/null
 
-      # ------------------------------------------------------------
-      # Save warm caches (if rebuilt)
-      # ------------------------------------------------------------
       - name: Save updated toolchain cache
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -121,10 +120,11 @@ jobs:
           key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
 
   # ============================================================
-  # 2️⃣ BUILD STAGE
+  # 3️⃣ BUILD STAGE
+  # Reuses the per-OS .sif container from artifacts
   # ============================================================
   build:
-    needs: setup
+    needs: [container-build, setup]
     strategy:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
@@ -132,37 +132,31 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      APPTAINER_VERSION: "1.4.3"
       GITHUB_WORKSPACE: ${{ github.workspace }}
       APPTAINER_BASE_CMD: >
         apptainer exec --cleanenv
         --bind ${{ github.workspace }}:${{ github.workspace }}
-        --bind /home/runner:/home/runner
         --pwd ${{ github.workspace }}
         demo.sif
 
     steps:
       - uses: actions/checkout@v4
 
-      # Restore toolchain and third_party caches
-      - name: Restore toolchain cache
+      - name: Download .sif image
+        uses: actions/download-artifact@v4
+        with:
+          name: apptainer-image-${{ matrix.os }}
+          path: .
+
+      - name: Restore caches
         uses: actions/cache/restore@v4
         with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-          restore-keys: |
-            toolchain-${{ matrix.os }}-
+          path: |
+            tools
+            third_party
+          key: cache-${{ matrix.os }}
 
-      - name: Restore third_party cache
-        uses: actions/cache/restore@v4
-        with:
-          path: third_party
-          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
-          restore-keys: |
-            thirdparty-${{ matrix.os }}-
-
-      # Run build inside Apptainer container
-      - name: Run Build
+      - name: Run Build inside container
         run: |
           $APPTAINER_BASE_CMD bash -c "
             set -e
@@ -182,7 +176,8 @@ jobs:
           path: build${{ matrix.xlen }}
 
   # ============================================================
-  # 3️⃣ TEST STAGE
+  # 4️⃣ TEST STAGE
+  # Runs tests inside the cached container
   # ============================================================
   tests:
     needs: build
@@ -195,17 +190,21 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      APPTAINER_VERSION: "1.4.3"
       GITHUB_WORKSPACE: ${{ github.workspace }}
       APPTAINER_BASE_CMD: >
         apptainer exec --cleanenv
         --bind ${{ github.workspace }}:${{ github.workspace }}
-        --bind /home/runner:/home/runner
         --pwd ${{ github.workspace }}
         demo.sif
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download .sif image
+        uses: actions/download-artifact@v4
+        with:
+          name: apptainer-image-${{ matrix.os }}
+          path: .
 
       - name: Restore caches
         uses: actions/cache/restore@v4
@@ -239,7 +238,7 @@ jobs:
           "
 
   # ============================================================
-  # 4️⃣ COMPLETION STAGE
+  # 5️⃣ COMPLETION STAGE
   # ============================================================
   complete:
     runs-on: ubuntu-22.04
