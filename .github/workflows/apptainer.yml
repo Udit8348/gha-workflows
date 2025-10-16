@@ -22,7 +22,20 @@ jobs:
       - name: Install Apptainer
         run: |
           sudo apt-get update
+          sudo apt-get install -y wget gnupg2
+          wget -O- https://apptainer.org/keys/apptainer-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/apptainer-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/apptainer-keyring.gpg] https://apptainer.org/packages/apt jammy main" | sudo tee /etc/apt/sources.list.d/apptainer.list
+          sudo apt-get update
           sudo apt-get install -y apptainer squashfs-tools
+
+      - name: Verify definition file
+        run: |
+          if [ ! -f container.def ]; then
+            echo "container.def not found"
+            exit 1
+          fi
+          echo "Using:"
+          realpath container.def
 
       - name: Build container
         if: ${{ inputs.build_from_scratch == 'true' }}
