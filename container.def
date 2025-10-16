@@ -1,0 +1,9 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%post
+    apt-get update && apt-get install -y python3
+
+%runscript
+    echo "Hello from Apptainer!"
+    python3 --version

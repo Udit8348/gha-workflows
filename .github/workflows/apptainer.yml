@@ -1,0 +1,42 @@
+name: Apptainer Build and Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_from_scratch:
+        description: "Build new .sif from .def?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  apptainer:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apptainer squashfs-tools
+
+      - name: Build container
+        if: ${{ inputs.build_from_scratch == 'true' }}
+        run: |
+          apptainer build demo.sif container.def
+
+      - name: Use existing container
+        if: ${{ inputs.build_from_scratch == 'false' }}
+        run: |
+          if [ ! -f demo.sif ]; then
+            echo "demo.sif not found"
+            exit 1
+          fi
+
+      - name: Run inside container
+        run: |
+          apptainer exec demo.sif bash -c "echo Hello from inside; ls -lh /"
