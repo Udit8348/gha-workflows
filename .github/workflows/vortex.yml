@@ -1,6 +1,17 @@
 name: Apptainer CI Pipeline (Slim per OS)
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  # can ignore unless debugging
+  workflow_dispatch:
+    inputs:
+      build_from_scratch:
+        description: "Build new .sif from .def?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   # ============================================================
