@@ -27,6 +27,13 @@ Both achieve the same end goal â€” building a `.sif` image from a `.def` file â€
 
 In summary, both workflows build and run the same container image, but the **PPA-based workflow** mirrors a realistic Ubuntu installation environment, while the **`setup-apptainer`** action provides a lightweight, fast-install alternative for CI testing and reproducible builds.
 
+## Refinements
+In Vortex Repo there are some [misc scripts](https://github.com/vortexgpgpu/vortex/tree/master/miscs/apptainer) that are hard dependencies for building the .`def` files. If possible these should be streamlined either into one script. Or placed directly in the `.def` or Vortex's [`ci/install_dependencies.sh`](https://github.com/vortexgpgpu/vortex/blob/master/ci/install_dependencies.sh) file.
+
+Recall, `install_dependencies.sh` is system dependencies and was previously installed in the Github Actions workflow, prior to building Vortex. Similarly, we need these dependencies met in the Apptainer.
+
+Optimally, the misc scripts and `install_dependencies.sh` are merged and pruned for overlap.
+
 
 ## Results
 
