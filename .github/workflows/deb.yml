@@ -1,4 +1,4 @@
-name: eWaterCycle Apptainer Marketplace Action Demo
+name: Marketplace Action Demo
 
 on:
     # can ignore unless debugging
