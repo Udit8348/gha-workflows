@@ -1,13 +1,24 @@
 name: Marketplace Action Demo
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  # can ignore unless debugging
+  workflow_dispatch:
+    inputs:
+      build_from_scratch:
+        description: "Build new .sif from .def?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   apptainer:
     runs-on: ubuntu-22.04
 
     env:
-      APPTAINER_VERSION: "1.3.6"
+      APPTAINER_VERSION: "1.4.3"
 
     steps:
       - name: Checkout code
