@@ -1,6 +1,7 @@
-name: Apptainer Build and Run
+name: Custom Apptainer Action Demo
 
 on:
+  # can ignore unless debugging
   workflow_dispatch:
     inputs:
       build_from_scratch:
@@ -37,6 +38,9 @@ jobs:
           realpath container.def
 
       - name: Build container
+        # actions will open your repo from its root
+        # this means the top-level directory of the repo after actions/checkout (above) runs
+        # with this in mind, set your .def / .sif paths accordingly
         if: ${{ inputs.build_from_scratch == 'true' }}
         run: |
           apptainer build demo.sif container.def

@@ -1,7 +1,8 @@
-name: eWaterCycle
+name: eWaterCycle's Apptainer Marketplace Action Demo
 
 on:
-  workflow_dispatch:
+    # can ignore unless debugging
+    workflow_dispatch:
     inputs:
       build_from_scratch:
         description: "Build new .sif from .def?"
@@ -19,8 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2 # from: https://github.com/marketplace/actions/setup-apptainer
         with:
           apptainer-version: "1.3.6"
 
@@ -35,8 +36,11 @@ jobs:
 
       - name: Build container
         if: ${{ inputs.build_from_scratch == 'true' }}
+        # actions will open your repo from its root
+        # this means the top-level directory of the repo after actions/checkout (above) runs
+        # with this in mind, set your .def / .sif paths accordingly
         run: |
-          apptainer build demo.sif container.def
+            apptainer build demo.sif container.def
 
       - name: Use existing container
         if: ${{ inputs.build_from_scratch == 'false' }}
