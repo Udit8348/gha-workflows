@@ -1,4 +1,4 @@
-name: Apptainer Build and Run
+name: eWaterCycle
 
 on:
   workflow_dispatch:
