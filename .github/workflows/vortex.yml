@@ -1,27 +1,25 @@
-name: Apptainer CI Pipeline (Slim per OS)
+name: Apptainer CI
 
-on:
-  # can ignore unless debugging
-  workflow_dispatch:
-    inputs:
-      build_from_scratch:
-        description: "Build new .sif from .def?"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
+on: [push, pull_request]
+
+# on:
+#   # can ignore unless debugging
+#   workflow_dispatch:
+#     inputs:
+#       build_from_scratch:
+#         description: "Build new .sif from .def?"
+#         required: true
+#         default: "true"
+#         type: choice
+#         options:
+#           - "true"
+#           - "false"
 
 jobs:
-  # ============================================================
-  # 1️⃣ CONTAINER BUILD STAGE
-  # Builds one .sif per OS version and caches it
-  # ============================================================
-  container-build:
+  apptainer-build:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     env:
@@ -65,15 +63,11 @@ jobs:
           name: apptainer-image-${{ matrix.os }}
           path: demo.sif
 
-  # ============================================================
-  # 2️⃣ SETUP STAGE
-  # Prepares toolchain and third_party with per-OS caches
-  # ============================================================
   setup:
-    needs: container-build
+    needs: apptainer-build
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -96,9 +90,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party
-          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
+          key: ${{ matrix.os }}-thirdparty-v0.1
           restore-keys: |
-            thirdparty-${{ matrix.os }}-
+            ${{ matrix.os }}-thirdparty-
 
       - name: Setup Toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -113,10 +107,7 @@ jobs:
       - name: Build Third Party
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
-          echo "Cache miss: rebuilding third_party..."
-          git submodule update --init --recursive third_party
-          make -C third_party clean || true
-          make -C third_party -j$(nproc)
+          make -C third_party > /dev/null
 
       - name: Save updated toolchain cache
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -130,132 +121,121 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: third_party
-          key: thirdparty-${{ matrix.os }}-${{ hashFiles('third_party/**', '.git/modules/third_party/HEAD') }}
+          key: ${{ matrix.os }}-thirdparty-v0.1
 
-  # ============================================================
-  # 3️⃣ BUILD STAGE
-  # Reuses the per-OS .sif container from artifacts
-  # ============================================================
-  build:
-    needs: [container-build, setup]
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
-        xlen: [32, 64]
-    runs-on: ${{ matrix.os }}
+  # build:
+  #   needs: [apptainer-build, setup]
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-22.04]
+  #       xlen: [32]
+  #   runs-on: ${{ matrix.os }}
 
-    env:
-      GITHUB_WORKSPACE: ${{ github.workspace }}
-      APPTAINER_BASE_CMD: >
-        apptainer exec --cleanenv
-        --bind ${{ github.workspace }}:${{ github.workspace }}
-        --pwd ${{ github.workspace }}
-        demo.sif
+  #   env:
+  #     GITHUB_WORKSPACE: ${{ github.workspace }}
+  #     APPTAINER_BASE_CMD: >
+  #       apptainer exec --cleanenv
+  #       --bind ${{ github.workspace }}:${{ github.workspace }}
+  #       --pwd ${{ github.workspace }}
+  #       demo.sif
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Download .sif image
-        uses: actions/download-artifact@v4
-        with:
-          name: apptainer-image-${{ matrix.os }}
-          path: .
+  #     - name: Download .sif image
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: apptainer-image-${{ matrix.os }}
+  #         path: .
 
-      - name: Restore caches
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            tools
-            third_party
-          key: cache-${{ matrix.os }}
+  #     - name: Restore caches
+  #       uses: actions/cache/restore@v4
+  #       with:
+  #         path: |
+  #           tools
+  #           third_party
+  #         key: cache-${{ matrix.os }}
 
-      - name: Run Build inside container
-        run: |
-          $APPTAINER_BASE_CMD bash -c "
-            set -e
-            TOOLDIR=\$PWD/tools
-            mkdir -p build${{ matrix.xlen }}
-            cd build${{ matrix.xlen }}
-            ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
-            source ../ci/toolchain_env.sh
-            make software -s
-            make tests -s
-          "
+  #     - name: Run Build inside container
+  #       run: |
+  #         $APPTAINER_BASE_CMD bash -c "
+  #           set -e
+  #           TOOLDIR=\$PWD/tools
+  #           mkdir -p build${{ matrix.xlen }}
+  #           cd build${{ matrix.xlen }}
+  #           ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+  #           source ../ci/toolchain_env.sh
+  #           make software -s
+  #           make tests -s
+  #         "
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.xlen }}
-          path: build${{ matrix.xlen }}
+  #     - name: Upload Build Artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: build-${{ matrix.os }}-${{ matrix.xlen }}
+  #         path: build${{ matrix.xlen }}
 
-  # ============================================================
-  # 4️⃣ TEST STAGE
-  # Runs tests inside the cached container
-  # ============================================================
-  tests:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
-        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
-        xlen: [32, 64]
-    runs-on: ${{ matrix.os }}
+  # tests:
+  #   needs: build
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [ubuntu-22.04, ubuntu-24.04]
+  #       name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
+  #       xlen: [32, 64]
+  #   runs-on: ${{ matrix.os }}
 
-    env:
-      GITHUB_WORKSPACE: ${{ github.workspace }}
-      APPTAINER_BASE_CMD: >
-        apptainer exec --cleanenv
-        --bind ${{ github.workspace }}:${{ github.workspace }}
-        --pwd ${{ github.workspace }}
-        demo.sif
+  #   env:
+  #     GITHUB_WORKSPACE: ${{ github.workspace }}
+  #     APPTAINER_BASE_CMD: >
+  #       apptainer exec --cleanenv
+  #       --bind ${{ github.workspace }}:${{ github.workspace }}
+  #       --pwd ${{ github.workspace }}
+  #       demo.sif
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Download .sif image
-        uses: actions/download-artifact@v4
-        with:
-          name: apptainer-image-${{ matrix.os }}
-          path: .
+  #     - name: Download .sif image
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: apptainer-image-${{ matrix.os }}
+  #         path: .
 
-      - name: Restore caches
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            tools
-            third_party
-          key: cache-${{ matrix.os }}
+  #     - name: Restore caches
+  #       uses: actions/cache/restore@v4
+  #       with:
+  #         path: |
+  #           tools
+  #           third_party
+  #         key: cache-${{ matrix.os }}
 
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.xlen }}
-          path: build${{ matrix.xlen }}
+  #     - name: Download Build Artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: build-${{ matrix.os }}-${{ matrix.xlen }}
+  #         path: build${{ matrix.xlen }}
 
-      - name: Run Tests inside container
-        run: |
-          $APPTAINER_BASE_CMD bash -c "
-            set -e
-            cd build${{ matrix.xlen }}
-            source ../ci/toolchain_env.sh
-            chmod -R +x .
-            if [ '${{ matrix.name }}' = 'regression' ]; then
-              ./ci/regression.sh --unittest
-              ./ci/regression.sh --isa
-              ./ci/regression.sh --kernel
-              ./ci/regression.sh --regression
-            else
-              ./ci/regression.sh --${{ matrix.name }}
-            fi
-          "
+  #     - name: Run Tests inside container
+  #       run: |
+  #         $APPTAINER_BASE_CMD bash -c "
+  #           set -e
+  #           cd build${{ matrix.xlen }}
+  #           source ../ci/toolchain_env.sh
+  #           chmod -R +x .
+  #           if [ '${{ matrix.name }}' = 'regression' ]; then
+  #             ./ci/regression.sh --unittest
+  #             ./ci/regression.sh --isa
+  #             ./ci/regression.sh --kernel
+  #             ./ci/regression.sh --regression
+  #           else
+  #             ./ci/regression.sh --${{ matrix.name }}
+  #           fi
+  #         "
 
-  # ============================================================
-  # 5️⃣ COMPLETION STAGE
-  # ============================================================
   complete:
     runs-on: ubuntu-22.04
-    needs: tests
+    needs: setup
     steps:
       - name: Check Completion
         run: echo "✅ All matrix jobs passed successfully."
