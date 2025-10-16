@@ -123,57 +123,57 @@ jobs:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
 
-  # build:
-  #   needs: [apptainer-build, setup]
-  #   strategy:
-  #     matrix:
-  #       os: [ubuntu-22.04]
-  #       xlen: [32]
-  #   runs-on: ${{ matrix.os }}
+  build:
+    needs: [apptainer-build, setup]
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+        xlen: [32]
+    runs-on: ${{ matrix.os }}
 
-  #   env:
-  #     GITHUB_WORKSPACE: ${{ github.workspace }}
-  #     APPTAINER_BASE_CMD: >
-  #       apptainer exec --cleanenv
-  #       --bind ${{ github.workspace }}:${{ github.workspace }}
-  #       --pwd ${{ github.workspace }}
-  #       demo.sif
+    env:
+      GITHUB_WORKSPACE: ${{ github.workspace }}
+      APPTAINER_BASE_CMD: >
+        apptainer exec --cleanenv
+        --bind ${{ github.workspace }}:${{ github.workspace }}
+        --pwd ${{ github.workspace }}
+        demo.sif
 
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: Download .sif image
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: apptainer-image-${{ matrix.os }}
-  #         path: .
+      - name: Download .sif image
+        uses: actions/download-artifact@v4
+        with:
+          name: apptainer-image-${{ matrix.os }}
+          path: .
 
-  #     - name: Restore caches
-  #       uses: actions/cache/restore@v4
-  #       with:
-  #         path: |
-  #           tools
-  #           third_party
-  #         key: cache-${{ matrix.os }}
+      # - name: Restore caches
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     path: |
+      #       tools
+      #       third_party
+      #     key: cache-${{ matrix.os }}
 
-  #     - name: Run Build inside container
-  #       run: |
-  #         $APPTAINER_BASE_CMD bash -c "
-  #           set -e
-  #           TOOLDIR=\$PWD/tools
-  #           mkdir -p build${{ matrix.xlen }}
-  #           cd build${{ matrix.xlen }}
-  #           ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
-  #           source ../ci/toolchain_env.sh
-  #           make software -s
-  #           make tests -s
-  #         "
+      - name: Run Build inside container
+        run: |
+          $APPTAINER_BASE_CMD bash -c "
+            set -e
+            TOOLDIR=\$PWD/tools
+            mkdir -p build${{ matrix.xlen }}
+            cd build${{ matrix.xlen }}
+            ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+            source ../ci/toolchain_env.sh
+            make software -s
+            make tests -s
+          "
 
-  #     - name: Upload Build Artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: build-${{ matrix.os }}-${{ matrix.xlen }}
-  #         path: build${{ matrix.xlen }}
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
 
   # tests:
   #   needs: build
