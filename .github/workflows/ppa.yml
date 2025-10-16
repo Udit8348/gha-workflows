@@ -1,7 +1,6 @@
 name: Custom Apptainer Action Demo
 
 on:
-  # can ignore unless debugging
   workflow_dispatch:
     inputs:
       build_from_scratch:
@@ -20,6 +19,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Verify build dependencies
+        run: |
+          for f in install_boost_openssl.sh openssl-package.deb boost-package.deb; do
+            if [ ! -f "$f" ]; then
+              echo "Missing dependency: $f"
+              exit 1
+            fi
+          done
+          echo "All dependency files are present."
+
+      - name: Upload build dependency artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apptainer-build-deps
+          path: |
+            install_boost_openssl.sh
+            openssl-package.deb
+            boost-package.deb
+
       - name: Install Apptainer
         run: |
           sudo apt-get update
@@ -34,13 +52,10 @@ jobs:
             echo "container.def not found"
             exit 1
           fi
-          echo "Using:"
+          echo "Using definition:"
           realpath container.def
 
       - name: Build container
-        # actions will open your repo from its root
-        # this means the top-level directory of the repo after actions/checkout (above) runs
-        # with this in mind, set your .def / .sif paths accordingly
         if: ${{ inputs.build_from_scratch == 'true' }}
         run: |
           apptainer build demo.sif container.def
