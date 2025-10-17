@@ -158,13 +158,32 @@ jobs:
         run: |
           $APPTAINER_BASE_CMD bash -c "
             set -e
+            echo '--- Inside container ---'
+            echo 'PWD before setting TOOLDIR:' \$PWD
             TOOLDIR=\$PWD/tools
+            echo 'TOOLDIR set to:' \$TOOLDIR
+
+
+            echo 'do a non build folder conf jic'
+            ./configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+
             mkdir -p build${{ matrix.xlen }}
             cd build${{ matrix.xlen }}
+            echo 'PWD after cd:' \$PWD
+
             ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+
+            echo 'Listing current directory:' 
             ls -al ./
+            echo 'Listing parent directory:' 
+            ls -al ../
+            echo 'Contents of ../ci:' 
             ls -al ../ci
+
+            echo '--- Sourcing toolchain_env.sh ---'
             source ../ci/toolchain_env.sh
+
+            echo '--- Starting build ---'
             make software -s
             make tests -s
           "
