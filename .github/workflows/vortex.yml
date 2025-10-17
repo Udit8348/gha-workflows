@@ -249,9 +249,12 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.xlen }}
           path: build${{ matrix.xlen }}
 
+      
+      #  need to run tests in a writable container
       - name: Run Build In Apptainer
         run: |
           apptainer exec \
+            --writable-tmpfs \
             --bind ${{ github.workspace }}:${{ github.workspace }} \
             --bind ${{ github.workspace }}/tools:/tools \
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
@@ -269,16 +272,18 @@ jobs:
               echo "can we find ccache?"
               which ccache || echo "ccache not found"
 
-              echo "is verilator alive?"
-              which verilator || echo "no verilator o.0"
-
+              
               ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
-
+              
               pushd build${{ matrix.xlen }}
-
+              
               ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
               
               source ci/toolchain_env.sh
+              
+              echo "is verilator alive?"
+              which verilator || echo "no verilator o.0"
+              
               chmod -R +x .
               if [ "${{ matrix.name }}" == "regression" ]; then
                 ./ci/regression.sh --unittest
