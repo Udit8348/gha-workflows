@@ -3,40 +3,34 @@ name: Apptainer CI
 on: [push, pull_request]
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-22.04]
-        xlen: [32]
-    runs-on: ${{ matrix.os }}
+  container:
+    runs-on: ubuntu-22.04
 
     env:
       APPTAINER_VERSION: "1.4.3"
-      TOOLDIR: ${{ github.workspace }}/tools
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Check .sif Cache
-        id: cache-sif
-        uses: actions/cache@v4
-        with:
-          path: miscs/apptainer/vortex.sif
-          key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
-          restore-keys: |
-            sif-${{ matrix.os }}-
 
       - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
         with:
           apptainer-version: ${{ env.APPTAINER_VERSION }}
 
+      - name: Check .sif Cache
+        id: cache-sif
+        uses: actions/cache@v4
+        with:
+          path: miscs/apptainer/vortex.sif
+          key: vortex-sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
+          restore-keys: |
+            sif-${{ runner.os }}-
+
       - name: Build Container On Miss
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
+          echo "Cache miss — rebuilding vortex.sif"
           rm -f miscs/apptainer/vortex.sif
           pushd miscs/apptainer
           apptainer build vortex.sif vortex.def
@@ -47,13 +41,37 @@ jobs:
         uses: actions/cache@v4
         with:
           path: miscs/apptainer/vortex.sif
-          key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
+          key: vortex-sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
 
       - name: Upload .sif as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sif-${{ matrix.os }}
+          name: vortex-sif
           path: miscs/apptainer/vortex.sif
+
+  build:
+    needs: [container]
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        xlen: [32, 64]
+
+    env:
+      TOOLDIR: ${{ github.workspace }}/tools
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Container Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vortex-sif
+          path: miscs/apptainer/
 
       - name: Access Toolchain Cache
         id: cache-toolchain
@@ -80,7 +98,7 @@ jobs:
         with:
           path: tools
           key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-      
+
       - name: Access Third Party Cache
         id: cache-thirdparty
         uses: actions/cache@v4
@@ -101,7 +119,7 @@ jobs:
         with:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
-      
+
       - name: Run Build In Apptainer
         run: |
           apptainer exec \
@@ -113,28 +131,81 @@ jobs:
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "--- Inside Container ---"
-              
-              echo "--- Configure Root and CI folder ---"
+
               ./configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
               mkdir -p build${{ matrix.xlen }}
               pushd build${{ matrix.xlen }}
-
-              echo "--- Configure Build Folder ---"
+              
               ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
-
-              echo "--- Source Toolchain ---"
+              
               source ../ci/toolchain_env.sh
-
-              echo "--- Starting build ---"
+              
               make software -s
               make tests -s
+              
+              popd
+          EOF
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}
+          path: build${{ matrix.xlen }}
+
+  test:
+    needs: [build]
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        xlen: [32, 64]
+        name: [kernel, regression, isa, unittest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.xlen }}-kernel
+          path: build${{ matrix.xlen }}
+
+      - name: Download Container Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vortex-sif
+          path: miscs/apptainer/
+
+      - name: Run Tests In Apptainer
+        run: |
+          apptainer exec \
+            --bind ${{ github.workspace }}:${{ github.workspace }} \
+            --bind ${{ github.workspace }}/tools:/tools \
+            --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
+            --pwd ${{ github.workspace }} \
+            --env TOOLDIR=/tools \
+            miscs/apptainer/vortex.sif bash <<'EOF'
+              set -e
+              pushd build${{ matrix.xlen }}
+              source ci/toolchain_env.sh
+              chmod -R +x .
+              if [ "${{ matrix.name }}" == "regression" ]; then
+                ./ci/regression.sh --unittest
+                ./ci/regression.sh --isa
+                ./ci/regression.sh --kernel
+                ./ci/regression.sh --regression
+              else
+                ./ci/regression.sh --${{ matrix.name }}
+              fi
               popd
           EOF
 
   complete:
     runs-on: ubuntu-22.04
-    needs: [build]
+    needs: [test]
     steps:
       - name: Check Completion
-        run: echo "All matrix jobs passed successfully."
+        run: echo "All container, build, and test jobs passed successfully."
