@@ -20,7 +20,6 @@ jobs:
         with:
           submodules: recursive
 
-      # cache .sif using apptainer version, vm os, .def file, and its dependencies
       - name: Check .sif Cache
         id: cache-sif
         uses: actions/cache@v4
@@ -35,8 +34,7 @@ jobs:
         with:
           apptainer-version: ${{ env.APPTAINER_VERSION }}
 
-      # def file has dependencies on files (*.deb and .sh) in its local directory so we need to pushd / popd during build
-      - name: Build container (if no cache hit)
+      - name: Build Container On Miss
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
           rm -f miscs/apptainer/vortex.sif
@@ -44,15 +42,14 @@ jobs:
           apptainer build vortex.sif vortex.def
           popd
 
-      - name: Save .sif image to cache
+      - name: Save .sif to Cache
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         uses: actions/cache@v4
         with:
           path: miscs/apptainer/vortex.sif
           key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
 
-      # downstream jobs can pull from this if needed
-      - name: Upload .sif as artifact
+      - name: Upload .sif as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sif-${{ matrix.os }}
@@ -67,7 +64,7 @@ jobs:
           restore-keys: |
             toolchain-${{ matrix.os }}-
 
-      - name: Download Toolchain on Cache Miss
+      - name: Build Toolchain On Miss
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           echo "Cache miss: building toolchain..."
@@ -77,7 +74,14 @@ jobs:
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
 
-      - name: Access third_party Cache
+      - name: Save Updated Toolchain Cache
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tools
+          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
+      
+      - name: Access Third Party Cache
         id: cache-thirdparty
         uses: actions/cache@v4
         with:
@@ -86,26 +90,19 @@ jobs:
           restore-keys: |
             ${{ matrix.os }}-thirdparty-
 
-      - name: Build Third Party on Cache Miss
+      - name: Build Third Party On Miss
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           make -C third_party > /dev/null
 
-      - name: Save Updated toolchain Cache
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: tools
-          key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
-
-      - name: Save Updated third_party Cache
+      - name: Save Updated Third Party Cache
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
       
-      - name: Run Build inside container
+      - name: Run Build Inside Container
         run: |
           apptainer exec \
             --bind ${{ github.workspace }}:${{ github.workspace }} \
@@ -115,17 +112,18 @@ jobs:
             --env TOOLDIR=/tools \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
-              echo "Inside Container"
-              echo "Keep outer config"
+              echo "--- Inside Container ---"
+              
+              echo "--- Configure Root and CI folder ---"
               ./configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
-              echo "todo parameterize this according to matrix"
               mkdir -p build${{ matrix.xlen }}
               cd build${{ matrix.xlen }}
 
+              echo "--- Configure Build Folder ---"
               ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
-              echo "--- Sourcing toolchain_env.sh ---"
+              echo "--- Source Toolchain ---"
               source ../ci/toolchain_env.sh
 
               echo "--- Starting build ---"
@@ -138,4 +136,4 @@ jobs:
     needs: [build]
     steps:
       - name: Check Completion
-        run: echo "✅ All matrix jobs passed successfully."
+        run: echo "All matrix jobs passed successfully."
