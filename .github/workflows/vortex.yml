@@ -40,7 +40,7 @@ jobs:
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
           rm -f miscs/apptainer/vortex.sif
-          apptainer build miscs/apptainer/vortex.sif miscs/apptainer/container.def
+          apptainer build miscs/apptainer/vortex.sif miscs/apptainer/vortex.def
 
       - name: Save .sif image to cache
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
