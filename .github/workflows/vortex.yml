@@ -166,6 +166,7 @@ jobs:
               ls -al ../ci
 
               echo '--- Sourcing toolchain_env.sh ---'
+              cat ../ci/toolchain_env.sh
               source ../ci/toolchain_env.sh
 
               echo '--- Starting build ---'
