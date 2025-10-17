@@ -8,6 +8,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
         xlen: [32]
+        name: [kernel]
     runs-on: ${{ matrix.os }}
 
     env:
@@ -102,7 +103,7 @@ jobs:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
       
-      - name: Run Build Inside Container
+      - name: Run Build In Apptainer
         run: |
           apptainer exec \
             --bind ${{ github.workspace }}:${{ github.workspace }} \
@@ -118,7 +119,7 @@ jobs:
               ./configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
               mkdir -p build${{ matrix.xlen }}
-              cd build${{ matrix.xlen }}
+              pushd build${{ matrix.xlen }}
 
               echo "--- Configure Build Folder ---"
               ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
@@ -129,7 +130,23 @@ jobs:
               echo "--- Starting build ---"
               make software -s
               make tests -s
+              popd
           EOF
+
+      - name: Run tests in Apptainer
+        run: |
+          pushd build${{ matrix.xlen }}
+          source ci/toolchain_env.sh
+          chmod -R +x . # Ensure all files have executable permissions
+          if [ "${{ matrix.name }}" == "regression" ]; then
+            ./ci/regression.sh --unittest
+            ./ci/regression.sh --isa
+            ./ci/regression.sh --kernel
+            ./ci/regression.sh --regression
+          else
+            ./ci/regression.sh --${{ matrix.name }}
+          fi
+          popd
 
   complete:
     runs-on: ubuntu-22.04
