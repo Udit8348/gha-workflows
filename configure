@@ -38,7 +38,7 @@ detect_osversion() {
     echo "$osversion"
 }
 
-# --- Safe copy and substitution ---
+# --- Safe file copy + substitution ---
 copy_files() {
     local source_dir="$1"
     local target_dir="$2"
@@ -49,13 +49,17 @@ copy_files() {
         same_dir=1
     fi
 
+    # Hardened escape helper
+    esc() {
+        printf '%s' "$1" | sed -e ':a' -e 'N' -e '$!ba' \
+            -e 's/[\/|&]/\\&/g' \
+            -e 's/\n/ /g'
+    }
+
     copy_and_update() {
         local src_pattern="$1"
         local dest_dir="$2"
         DEBUG "copy_and_update pattern=$src_pattern dest=$dest_dir"
-
-        # Escape helper
-        esc() { echo "$1" | sed 's/[\/|&]/\\&/g'; }
 
         for file in $src_pattern; do
             if [ -f "$file" ]; then
@@ -74,12 +78,19 @@ copy_files() {
 
                     DEBUG "Escaped vars: SRC=$SRC_DIR_ESC TOOL=$TOOLDIR_ESC PREFIX=$PREFIX_ESC CURR=$CURRDIR_ESC"
 
-                    sed "s|@VORTEX_HOME@|$SRC_DIR_ESC|g;
-                         s|@XLEN@|$XLEN|g;
-                         s|@TOOLDIR@|$TOOLDIR_ESC|g;
-                         s|@OSVERSION@|$OSVERSION_ESC|g;
-                         s|@INSTALLDIR@|$PREFIX_ESC|g;
-                         s|@BUILDDIR@|$CURRDIR_ESC|g" "$file" > "$dest_file"
+                    if ! sed "s|@VORTEX_HOME@|$SRC_DIR_ESC|g;
+                              s|@XLEN@|$XLEN|g;
+                              s|@TOOLDIR@|$TOOLDIR_ESC|g;
+                              s|@OSVERSION@|$OSVERSION_ESC|g;
+                              s|@INSTALLDIR@|$PREFIX_ESC|g;
+                              s|@BUILDDIR@|$CURRDIR_ESC|g" "$file" > "$dest_file"; then
+                        echo "[ERROR] sed substitution failed for $file"
+                        echo "SRC_DIR_ESC=$SRC_DIR_ESC"
+                        echo "TOOLDIR_ESC=$TOOLDIR_ESC"
+                        echo "PREFIX_ESC=$PREFIX_ESC"
+                        echo "CURRDIR_ESC=$CURRDIR_ESC"
+                        exit 1
+                    fi
 
                     DEBUG "Generated: $dest_file"
 
