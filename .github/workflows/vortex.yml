@@ -184,13 +184,15 @@ jobs:
 
     strategy:
       matrix:
-        # os: [ubuntu-22.04, ubuntu-24.04]
-        os: [ubuntu-22.04]
-        # xlen: [32, 64]
-        xlen: [32]
+        os: [ubuntu-22.04, ubuntu-24.04]
+        # os: [ubuntu-22.04]
+        xlen: [32, 64]
+        # xlen: [32]
         # name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
         # name: [regression]
-        name: [cache]
+        # name: [cache]
+        # vm and opencl are broken on my mainline ??
+        name: [regression, cache, config1, config2, debug, scope, stress, synthesis, vector, cupbop, tensor]
 
     env:
       APPTAINER_VERSION: "1.4.3"
