@@ -110,7 +110,7 @@ jobs:
 
       - name: Run Build inside container
         run: |
-          $APPTAINER_BASE_CMD \
+          apptainer $APPTAINER_BASE_CMD \
             --bind ${{ github.workspace }}/tools:/tools \
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
             --env TOOLDIR=/tools \
