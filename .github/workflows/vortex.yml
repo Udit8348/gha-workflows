@@ -11,7 +11,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      GITHUB_WORKSPACE: ${{ github.workspace }}
       APPTAINER_VERSION: "1.4.3"
       APPTAINER_BASE_CMD: --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
       TOOLDIR: ${{ github.workspace }}/tools
@@ -107,12 +106,14 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/tools"
           mkdir -p "${{ github.workspace }}/third_party"
-
+      
       - name: Run Build inside container
         run: |
           apptainer exec $APPTAINER_BASE_CMD \
+            --bind ${{ github.workspace }}:${{ github.workspace }} \
             --bind ${{ github.workspace }}/tools:/tools \
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
+            --pwd ${{ github.workspace }} \
             --env TOOLDIR=/tools \
             demo.sif bash <<'EOF'
               set -e
@@ -149,13 +150,9 @@ jobs:
               echo "--- Starting build ---"
               make software -s
               make tests -s
-          EOF
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.os }}-${{ matrix.xlen }}
-          path: build${{ matrix.xlen }}
+              ls -al ${{ github.workspace }}/tests/regression/dogfood
+          EOF
 
   complete:
     runs-on: ubuntu-22.04
