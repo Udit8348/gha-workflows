@@ -138,6 +138,9 @@ jobs:
           name: apptainer-image-${{ matrix.os }}
           path: .
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Run Build inside container
         run: |
           $APPTAINER_BASE_CMD \
