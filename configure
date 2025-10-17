@@ -9,15 +9,15 @@ DEBUG "Current working directory: $(pwd)"
 DEBUG "User: $(whoami)"
 DEBUG "Home directory: $HOME"
 
-# Determine the current working directory
+# Determine current working directory
 CURRENT_DIR=$(pwd)
 DEBUG "CURRENT_DIR set to: $CURRENT_DIR"
 
-# Function to detect current OS
+# Detect OS
 detect_osversion() {
     local osversion="unsupported"
     if [ -f /etc/os-release ]; then
-        . /etc/os-release  # Source the os-release file to get OS information
+        . /etc/os-release
         DEBUG "Detected ID=$ID, VERSION_CODENAME=$VERSION_CODENAME, VERSION_ID=$VERSION_ID"
         case "$ID" in
             ubuntu)
@@ -38,7 +38,7 @@ detect_osversion() {
     echo "$osversion"
 }
 
-# Function to recursively copy files, skipping the current directory
+# --- Safe copy and substitution ---
 copy_files() {
     local source_dir="$1"
     local target_dir="$2"
@@ -49,11 +49,14 @@ copy_files() {
         same_dir=1
     fi
 
-    # Function to copy and update file
     copy_and_update() {
         local src_pattern="$1"
         local dest_dir="$2"
         DEBUG "copy_and_update pattern=$src_pattern dest=$dest_dir"
+
+        # Escape helper
+        esc() { echo "$1" | sed 's/[\/|&]/\\&/g'; }
+
         for file in $src_pattern; do
             if [ -f "$file" ]; then
                 DEBUG "Processing file: $file"
@@ -62,9 +65,24 @@ copy_files() {
                     filename_no_ext="${filename%.in}"
                     dest_file="$dest_dir/$filename_no_ext"
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g" "$file" > "$dest_file"
+
+                    SRC_DIR_ESC=$(esc "$SOURCE_DIR")
+                    TOOLDIR_ESC=$(esc "$TOOLDIR")
+                    OSVERSION_ESC=$(esc "$OSVERSION")
+                    PREFIX_ESC=$(esc "$PREFIX")
+                    CURRDIR_ESC=$(esc "$CURRENT_DIR")
+
+                    DEBUG "Escaped vars: SRC=$SRC_DIR_ESC TOOL=$TOOLDIR_ESC PREFIX=$PREFIX_ESC CURR=$CURRDIR_ESC"
+
+                    sed "s|@VORTEX_HOME@|$SRC_DIR_ESC|g;
+                         s|@XLEN@|$XLEN|g;
+                         s|@TOOLDIR@|$TOOLDIR_ESC|g;
+                         s|@OSVERSION@|$OSVERSION_ESC|g;
+                         s|@INSTALLDIR@|$PREFIX_ESC|g;
+                         s|@BUILDDIR@|$CURRDIR_ESC|g" "$file" > "$dest_file"
+
                     DEBUG "Generated: $dest_file"
-                    # apply permissions to bash scripts
+
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
                         chmod +x "$dest_file"
@@ -88,22 +106,20 @@ copy_files() {
             pattern=${pattern:1}
         fi
         local source_pattern="$source_dir/$pattern"
-        if [[ "$pattern" == "." ]]; then
-            source_pattern=$source_dir
-        fi
+        [ "$pattern" == "." ] && source_pattern=$source_dir
 
-        DEBUG "Scanning for directories matching: $source_pattern"
+        DEBUG "Scanning for: $source_pattern"
         find "$source_dir" -type d -path "$source_pattern" 2>/dev/null | while read dir; do
             local rel_path="${dir#$source_dir}"
             rel_path="${rel_path#/}"
             local full_target_dir="$target_dir/$rel_path"
-            DEBUG "Handling directory: $dir -> $full_target_dir"
+            DEBUG "Dir: $dir -> $full_target_dir"
 
             if [ $full_copy -eq 1 ]; then
-                DEBUG "Full copy mode for $dir"
+                DEBUG "Full copy mode"
                 copy_and_update "$dir/*" "$full_target_dir"
             else
-                DEBUG "Partial copy mode for $dir"
+                DEBUG "Partial copy mode"
                 copy_and_update "$dir/Makefile" "$full_target_dir"
                 copy_and_update "$dir/common.mk" "$full_target_dir"
                 copy_and_update "$dir/*.in" "$full_target_dir"
@@ -112,14 +128,14 @@ copy_files() {
     done
 }
 
-# --- Configuration defaults ---
+# --- Defaults ---
 default_xlen=32
 default_tooldir=$HOME/tools
 default_osversion=$(detect_osversion)
 default_prefix=$CURRENT_DIR
-DEBUG "Defaults: xlen=$default_xlen, tooldir=$default_tooldir, os=$default_osversion, prefix=$default_prefix"
+DEBUG "Defaults: xlen=$default_xlen tool=$default_tooldir os=$default_osversion prefix=$default_prefix"
 
-# Load defaults from config.mk
+# Load config.mk defaults
 if [ -f "config.mk" ]; then
     DEBUG "Loading defaults from config.mk"
     while IFS='=' read -r key value; do
@@ -140,15 +156,11 @@ TOOLDIR=${TOOLDIR:=$default_tooldir}
 OSVERSION=${OSVERSION:=$default_osversion}
 PREFIX=${PREFIX:=$default_prefix}
 
-DEBUG "Final configuration:"
-DEBUG "  XLEN=$XLEN"
-DEBUG "  TOOLDIR=$TOOLDIR"
-DEBUG "  OSVERSION=$OSVERSION"
-DEBUG "  PREFIX=$PREFIX"
+DEBUG "Final config: XLEN=$XLEN TOOLDIR=$TOOLDIR OSVERSION=$OSVERSION PREFIX=$PREFIX"
 
-# Parse args
+# Parse CLI args
 usage() {
-    echo "Usage: $0 [--xlen=<value>] [--tooldir=<path>] [--osversion=<version>] [--prefix=<path>]"
+    echo "Usage: $0 [--xlen=<val>] [--tooldir=<path>] [--osversion=<ver>] [--prefix=<path>]"
     exit 1
 }
 while [[ "$#" -gt 0 ]]; do
@@ -172,11 +184,10 @@ SUBDIRS=("." "!ci" "!perf" "hw*" "kernel*" "runtime*" "sim*" "tests*")
 
 SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 THIRD_PARTY_DIR=$SOURCE_DIR/third_party
-
 DEBUG "SOURCE_DIR=$SOURCE_DIR"
 DEBUG "THIRD_PARTY_DIR=$THIRD_PARTY_DIR"
 
-DEBUG "Beginning recursive file copy..."
+DEBUG "Beginning recursive copy..."
 copy_files "$SOURCE_DIR" "$CURRENT_DIR"
 
-DEBUG "Configuration complete. All files copied to $CURRENT_DIR"
+DEBUG "✅ Configuration complete. Files populated under $CURRENT_DIR"
