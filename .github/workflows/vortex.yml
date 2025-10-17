@@ -155,8 +155,10 @@ jobs:
           path: .
 
       - name: Run Build inside container
+        env:
+          TOOLDIR: ${{ github.workspace }}/tools
         run: |
-          $APPTAINER_BASE_CMD bash -c "
+          $APPTAINER_BASE_CMD --env TOOLDIR=$TOOLDIR bash -c "
             set -e
             echo '--- Inside container ---'
             echo 'PWD before setting TOOLDIR:' \$PWD
