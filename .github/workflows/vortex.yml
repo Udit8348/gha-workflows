@@ -116,7 +116,8 @@ jobs:
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "Inside Container"
-              echo "Skipping outer config?"
+              echo "Keep outer config"
+              ./configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
               echo "todo parameterize this according to matrix"
               mkdir -p build${{ matrix.xlen }}
