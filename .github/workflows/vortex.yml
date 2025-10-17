@@ -48,7 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vortex-sif
-          path: vortex.sif
+          path: miscs/apptainer/vortex.sif
 
   build:
     needs: [container]
