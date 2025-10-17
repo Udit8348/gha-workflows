@@ -27,6 +27,7 @@ jobs:
           restore-keys: |
             sif-${{ runner.os }}-
 
+      # missed
       - name: Build Container On Miss
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
@@ -47,7 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vortex-sif
-          path: miscs/apptainer/vortex.sif
+          path: vortex.sif
 
   build:
     needs: [container]
