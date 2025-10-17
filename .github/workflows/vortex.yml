@@ -16,17 +16,18 @@ jobs:
       TOOLDIR: ${{ github.workspace }}/tools
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Restore cached .sif image
+      # cache .sif using apptainer version, vm os, .def file, and its dependencies
+      - name: Check .sif Cache
         id: cache-sif
         uses: actions/cache@v4
         with:
-          path: demo.sif
-          key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+          path: miscs/apptainer/vortex.sif
+          key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
           restore-keys: |
             sif-${{ matrix.os }}-
 
@@ -38,22 +39,21 @@ jobs:
       - name: Build container (if no cache hit)
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
-          echo "Cache miss — rebuilding demo.sif..."
-          rm -f demo.sif
-          apptainer build demo.sif container.def
+          rm -f miscs/apptainer/vortex.sif
+          apptainer build miscs/apptainer/vortex.sif miscs/apptainer/container.def
 
       - name: Save .sif image to cache
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         uses: actions/cache@v4
         with:
-          path: demo.sif
-          key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+          path: miscs/apptainer/vortex.sif
+          key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
 
       - name: Upload .sif as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: apptainer-image-${{ matrix.os }}
-          path: demo.sif
+          name: sif-${{ matrix.os }}
+          path: miscs/apptainer/vortex.sif
 
       - name: Restore toolchain cache
         id: cache-toolchain
@@ -115,7 +115,7 @@ jobs:
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
             --pwd ${{ github.workspace }} \
             --env TOOLDIR=/tools \
-            demo.sif bash <<'EOF'
+            miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "--- Inside container ---"
               echo "PWD before setting TOOLDIR: $PWD"
