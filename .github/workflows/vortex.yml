@@ -121,7 +121,7 @@ jobs:
     env:
       GITHUB_WORKSPACE: ${{ github.workspace }}
       APPTAINER_VERSION: "1.4.3"
-      APPTAINER_BASE_CMD: apptainer exec --cleanenv --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
+      APPTAINER_BASE_CMD: apptainer exec --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
       TOOLDIR: ${{ github.workspace }}/tools
 
     steps:
@@ -165,6 +165,13 @@ jobs:
               echo 'Contents of ../ci:' 
               ls -al ../ci
 
+
+              echo 'Contents of tool (hardcoded)'
+              ls /home/runner/work/gha-workflows/gha-workflows/tools/
+
+              echo 'Contents of TOOLDIR'
+              ls \$TOOLDIR
+
               echo '--- Sourcing toolchain_env.sh ---'
               cat ../ci/toolchain_env.sh
               source ../ci/toolchain_env.sh
@@ -193,7 +200,7 @@ jobs:
   #   env:
   #     GITHUB_WORKSPACE: ${{ github.workspace }}
   #     APPTAINER_VERSION: "1.4.3"
-  #     APPTAINER_BASE_CMD: apptainer exec --cleanenv --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
+  #     APPTAINER_BASE_CMD: apptainer exec --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
   #
   #   steps:
   #     - uses: actions/checkout@v4
