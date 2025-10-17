@@ -3,7 +3,7 @@ name: Apptainer CI
 on: [push, pull_request]
 
 jobs:
-  apptainer-build:
+  build:
     strategy:
       matrix:
         os: [ubuntu-22.04]
@@ -12,7 +12,6 @@ jobs:
 
     env:
       APPTAINER_VERSION: "1.4.3"
-      APPTAINER_BASE_CMD: --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
       TOOLDIR: ${{ github.workspace }}/tools
 
     steps:
@@ -52,13 +51,14 @@ jobs:
           path: miscs/apptainer/vortex.sif
           key: vortex-sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('miscs/apptainer/vortex.def', 'miscs/apptainer/install_boost_openssl.sh', 'miscs/apptainer/*.deb') }}
 
+      # downstream jobs can pull from this if needed
       - name: Upload .sif as artifact
         uses: actions/upload-artifact@v4
         with:
           name: sif-${{ matrix.os }}
           path: miscs/apptainer/vortex.sif
 
-      - name: Restore toolchain cache
+      - name: Access Toolchain Cache
         id: cache-toolchain
         uses: actions/cache@v4
         with:
@@ -67,16 +67,7 @@ jobs:
           restore-keys: |
             toolchain-${{ matrix.os }}-
 
-      - name: Restore third_party cache
-        id: cache-thirdparty
-        uses: actions/cache@v4
-        with:
-          path: third_party
-          key: ${{ matrix.os }}-thirdparty-v0.1
-          restore-keys: |
-            ${{ matrix.os }}-thirdparty-
-
-      - name: Setup Toolchain
+      - name: Download Toolchain on Cache Miss
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           echo "Cache miss: building toolchain..."
@@ -86,33 +77,37 @@ jobs:
           ../configure --tooldir=$TOOLDIR
           ci/toolchain_install.sh --all
 
-      - name: Build Third Party
+      - name: Access third_party Cache
+        id: cache-thirdparty
+        uses: actions/cache@v4
+        with:
+          path: third_party
+          key: ${{ matrix.os }}-thirdparty-v0.1
+          restore-keys: |
+            ${{ matrix.os }}-thirdparty-
+
+      - name: Build Third Party on Cache Miss
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         run: |
           make -C third_party > /dev/null
 
-      - name: Save updated toolchain cache
+      - name: Save Updated toolchain Cache
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: tools
           key: toolchain-${{ matrix.os }}-${{ hashFiles('ci/toolchain_install.sh') }}
 
-      - name: Save updated third_party cache
+      - name: Save Updated third_party Cache
         if: steps.cache-thirdparty.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
-
-      - name: Ensure bind paths exist inside conatiner
-        run: |
-          mkdir -p "${{ github.workspace }}/tools"
-          mkdir -p "${{ github.workspace }}/third_party"
       
       - name: Run Build inside container
         run: |
-          apptainer exec $APPTAINER_BASE_CMD \
+          apptainer exec \
             --bind ${{ github.workspace }}:${{ github.workspace }} \
             --bind ${{ github.workspace }}/tools:/tools \
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
@@ -120,47 +115,26 @@ jobs:
             --env TOOLDIR=/tools \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
-              echo "--- Inside container ---"
-              echo "PWD before setting TOOLDIR: $PWD"
-              echo "TOOLDIR set to: $TOOLDIR"
+              echo "Inside Container"
+              echo "Skipping outer config?"
 
-              echo "Outer configure"
-              ./configure --tooldir=$TOOLDIR --xlen=32
+              echo "todo parameterize this according to matrix"
+              mkdir -p build${{ matrix.xlen }}
+              cd build${{ matrix.xlen }}
 
-              mkdir -p build32
-              cd build32
-              echo "PWD after cd: $PWD"
-
-              ../configure --tooldir=$TOOLDIR --xlen=32
-
-              echo "Listing current directory:"
-              ls -al ./
-              echo "Listing parent directory:"
-              ls -al ../
-              echo "Contents of ../ci:"
-              ls -al ../ci
-
-              echo "Current TOOLDIR"
-              echo $TOOLDIR
-
-              echo "Contents of TOOLDIR"
-              ls $TOOLDIR || true
+              ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
 
               echo "--- Sourcing toolchain_env.sh ---"
-              cat ../ci/toolchain_env.sh
               source ../ci/toolchain_env.sh
 
               echo "--- Starting build ---"
               make software -s
               make tests -s
-
-              echo "check if we had a productive build"
-              ls -al ${{ github.workspace }}/build${{ matrix.xlen }}/tests/regression/dogfood
           EOF
 
   complete:
     runs-on: ubuntu-22.04
-    needs: [apptainer-build]
+    needs: [build]
     steps:
       - name: Check Completion
         run: echo "✅ All matrix jobs passed successfully."
