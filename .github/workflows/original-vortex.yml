@@ -16,7 +16,6 @@ name: Mainline Vortex
 # on: [push, pull_request]
 
 on:
-  # can ignore unless debugging
   workflow_dispatch:
     inputs:
       build_from_scratch:

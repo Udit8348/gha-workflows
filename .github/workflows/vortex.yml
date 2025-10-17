@@ -1,6 +1,16 @@
 name: Apptainer CI
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+    inputs:
+      build_from_scratch:
+        description: "Build new .sif from .def?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   container:
