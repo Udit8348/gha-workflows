@@ -128,10 +128,12 @@ jobs:
               source ../ci/toolchain_env.sh
 
               which ccache
+              ccache --version
+              verilator --version
 
               echo "--- Starting build ---"
               make software -s
-              make tests -s CXX=g++ # ccache missing in container?
+              make tests -s
               popd
           EOF
 
