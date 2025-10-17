@@ -8,7 +8,6 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
         xlen: [32]
-        name: [kernel]
     runs-on: ${{ matrix.os }}
 
     env:
@@ -132,21 +131,6 @@ jobs:
               make tests -s
               popd
           EOF
-
-      # - name: Run tests in Apptainer
-      #   run: |
-      #     pushd build${{ matrix.xlen }}
-      #     source ci/toolchain_env.sh
-      #     chmod -R +x . # Ensure all files have executable permissions
-      #     if [ "${{ matrix.name }}" == "regression" ]; then
-      #       ./ci/regression.sh --unittest
-      #       ./ci/regression.sh --isa
-      #       ./ci/regression.sh --kernel
-      #       ./ci/regression.sh --regression
-      #     else
-      #       ./ci/regression.sh --${{ matrix.name }}
-      #     fi
-      #     popd
 
   complete:
     runs-on: ubuntu-22.04
