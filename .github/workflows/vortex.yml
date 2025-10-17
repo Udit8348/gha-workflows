@@ -36,11 +36,14 @@ jobs:
         with:
           apptainer-version: ${{ env.APPTAINER_VERSION }}
 
+      # def file has dependencies on files (*.deb and .sh) in its local directory so we need to pushd / popd during build
       - name: Build container (if no cache hit)
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
           rm -f miscs/apptainer/vortex.sif
-          apptainer build miscs/apptainer/vortex.sif miscs/apptainer/vortex.def
+          pushd miscs/apptainer
+          apptainer build vortex.sif vortex.def
+          popd
 
       - name: Save .sif image to cache
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
