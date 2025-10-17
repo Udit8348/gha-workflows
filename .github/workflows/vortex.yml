@@ -129,7 +129,7 @@ jobs:
 
               echo "--- Starting build ---"
               make software -s
-              make tests -s
+              make tests -s CXX=g++ # ccache missing in container?
               popd
           EOF
 
