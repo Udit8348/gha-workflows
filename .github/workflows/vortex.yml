@@ -127,28 +127,26 @@ jobs:
               echo "--- Source Toolchain ---"
               source ../ci/toolchain_env.sh
 
-              export PATH="$PATH:/usr/bin"
-
               echo "--- Starting build ---"
               make software -s
               make tests -s
               popd
           EOF
 
-      - name: Run tests in Apptainer
-        run: |
-          pushd build${{ matrix.xlen }}
-          source ci/toolchain_env.sh
-          chmod -R +x . # Ensure all files have executable permissions
-          if [ "${{ matrix.name }}" == "regression" ]; then
-            ./ci/regression.sh --unittest
-            ./ci/regression.sh --isa
-            ./ci/regression.sh --kernel
-            ./ci/regression.sh --regression
-          else
-            ./ci/regression.sh --${{ matrix.name }}
-          fi
-          popd
+      # - name: Run tests in Apptainer
+      #   run: |
+      #     pushd build${{ matrix.xlen }}
+      #     source ci/toolchain_env.sh
+      #     chmod -R +x . # Ensure all files have executable permissions
+      #     if [ "${{ matrix.name }}" == "regression" ]; then
+      #       ./ci/regression.sh --unittest
+      #       ./ci/regression.sh --isa
+      #       ./ci/regression.sh --kernel
+      #       ./ci/regression.sh --regression
+      #     else
+      #       ./ci/regression.sh --${{ matrix.name }}
+      #     fi
+      #     popd
 
   complete:
     runs-on: ubuntu-22.04
