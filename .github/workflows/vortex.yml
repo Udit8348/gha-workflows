@@ -174,7 +174,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
         xlen: [32, 64]
-        name: [kernel]
+        name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
 
     env:
       APPTAINER_VERSION: "1.4.3"
@@ -300,4 +300,4 @@ jobs:
     needs: [test]
     steps:
       - name: Check Completion
-        run: echo "All container, build, and test jobs passed successfully."
+        run: echo "All tests passed, in Apptainer"
