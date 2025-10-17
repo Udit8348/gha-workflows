@@ -60,7 +60,6 @@ jobs:
         xlen: [32]
 
     env:
-      TOOLDIR: ${{ github.workspace }}/tools
       APPTAINER_VERSION: "1.4.3"
 
     steps:
@@ -93,10 +92,9 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           echo "Cache miss: building toolchain..."
-          TOOLDIR=$PWD/tools
           mkdir -p build
           cd build
-          ../configure --tooldir=$TOOLDIR
+          ../configure --tooldir=${{ github.workspace }}/tools
           ci/toolchain_install.sh --all
 
       - name: Save Updated Toolchain Cache
@@ -134,18 +132,22 @@ jobs:
             --bind ${{ github.workspace }}/tools:/tools \
             --bind ${{ github.workspace }}/third_party:${{ github.workspace }}/third_party \
             --pwd ${{ github.workspace }} \
-            --env TOOLDIR=/tools \
+            --env APPTAINER_TOOLDIR=/tools \
             miscs/apptainer/vortex.sif bash <<'EOF'
               set -e
               echo "--- Inside Container ---"
 
+              # tooldir in conatiner needs to be shorter
               echo "--- what is my tooldir? ---"
-              echo $TOOLDIR
+              echo $APPTAINER_TOOLDIR
+
+              echo "--- what is in my tooldir? ---"
+              ls $APPTAINER_TOOLDIR
 
               echo " --- what is my pwd? ---"
               echo $PWD
 
-              ./configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
+              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
 
               # mkdir -p build${{ matrix.xlen }}
               # pushd build${{ matrix.xlen }}
