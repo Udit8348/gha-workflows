@@ -152,7 +152,7 @@ jobs:
               mkdir -p build${{ matrix.xlen }}
               pushd build${{ matrix.xlen }}
               
-              ../configure --tooldir=$TOOLDIR --xlen=${{ matrix.xlen }}
+              ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
               
               source ../ci/toolchain_env.sh
               
@@ -272,7 +272,12 @@ jobs:
               echo "is verilator alive?"
               which verilator || echo "no verilator o.0"
 
+              ./configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+
               pushd build${{ matrix.xlen }}
+
+              ../configure --tooldir=$APPTAINER_TOOLDIR --xlen=${{ matrix.xlen }}
+              
               source ci/toolchain_env.sh
               chmod -R +x .
               if [ "${{ matrix.name }}" == "regression" ]; then
