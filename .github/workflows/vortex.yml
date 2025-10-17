@@ -138,8 +138,8 @@ jobs:
           name: apptainer-image-${{ matrix.os }}
           path: .
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      # - name: Setup tmate session
+        # uses: mxschmitt/action-tmate@v3
 
       - name: Run Build inside container
         run: |
@@ -169,11 +169,14 @@ jobs:
               ls -al ../ci
 
 
-              echo 'Contents of tool (hardcoded)'
-              ls /home/runner/work/gha-workflows/gha-workflows/tools/
+              echo 'Current TOOLDIR'
+              echo \$TOOLDIR
 
               echo 'Contents of TOOLDIR'
               ls \$TOOLDIR
+              
+              echo 'Contents of tool (hardcoded)'
+              ls /home/runner/work/gha-workflows/gha-workflows/tools/
 
               echo '--- Sourcing toolchain_env.sh ---'
               cat ../ci/toolchain_env.sh
