@@ -162,6 +162,8 @@ jobs:
             mkdir -p build${{ matrix.xlen }}
             cd build${{ matrix.xlen }}
             ../configure --tooldir=\$TOOLDIR --xlen=${{ matrix.xlen }}
+            ls -al ./
+            ls -al ../ci
             source ../ci/toolchain_env.sh
             make software -s
             make tests -s
