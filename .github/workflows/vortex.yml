@@ -127,6 +127,8 @@ jobs:
               echo "--- Source Toolchain ---"
               source ../ci/toolchain_env.sh
 
+              which ccache
+
               echo "--- Starting build ---"
               make software -s
               make tests -s CXX=g++ # ccache missing in container?

@@ -46,7 +46,7 @@ From: ubuntu:22.04
                        ca-certificates-java libchromaprint1 software-properties-common perl-modules bzip2 \
                        unzip zlib1g-dev libtinfo5 usbutils pciutils gawk bison tar python3.9 locales zstd uuid-dev ccache \
                        libboost-filesystem1.74.0 libboost-program-options1.74.0 libboost-system1.74.0 libboost-chrono1.74.0 libboost-thread1.74.0 environment-modules \
-                       build-essential valgrind libstdc++6 libffi8 || true
+                       build-essential valgrind libstdc++6 libffi8
 
     ln -s /usr/bin/python3 /usr/bin/python
 
