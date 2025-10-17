@@ -2,6 +2,19 @@ name: Apptainer CI
 
 on: [push, pull_request]
 
+# on:
+#   # can ignore unless debugging
+#   workflow_dispatch:
+#     inputs:
+#       build_from_scratch:
+#         description: "Build new .sif from .def?"
+#         required: true
+#         default: "true"
+#         type: choice
+#         options:
+#           - "true"
+#           - "false"
+
 jobs:
   apptainer-build:
     strategy:
@@ -16,40 +29,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # Cache Apptainer binary for reuse across jobs
-      # ------------------------------------------------------------
-      - name: Restore Apptainer cache
-        id: cache-apptainer
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/bin/apptainer
-            /usr/local/libexec/apptainer
-            /usr/local/etc/apptainer
-          key: apptainer-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}
-          restore-keys: |
-            apptainer-${{ matrix.os }}-
-
-      - name: Install Apptainer (if not cached)
-        if: steps.cache-apptainer.outputs.cache-hit != 'true'
-        uses: eWaterCycle/setup-apptainer@v2
-        with:
-          apptainer-version: ${{ env.APPTAINER_VERSION }}
-
-      - name: Save Apptainer cache
-        if: steps.cache-apptainer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            /usr/local/bin/apptainer
-            /usr/local/libexec/apptainer
-            /usr/local/etc/apptainer
-          key: apptainer-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}
-
-      # ------------------------------------------------------------
-      # Restore cached .sif or rebuild
-      # ------------------------------------------------------------
       - name: Restore cached .sif image
         id: cache-sif
         uses: actions/cache@v4
@@ -58,6 +37,11 @@ jobs:
           key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
           restore-keys: |
             sif-${{ matrix.os }}-
+
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
 
       - name: Build container (if no cache hit)
         if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
@@ -149,6 +133,7 @@ jobs:
 
     env:
       GITHUB_WORKSPACE: ${{ github.workspace }}
+      APPTAINER_VERSION: "1.4.3"
       APPTAINER_BASE_CMD: >
         apptainer exec --cleanenv
         --bind ${{ github.workspace }}:${{ github.workspace }}
@@ -158,23 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # Restore Apptainer cache and .sif
-      # ------------------------------------------------------------
-      - name: Restore Apptainer cache
-        id: cache-apptainer
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/bin/apptainer
-            /usr/local/libexec/apptainer
-            /usr/local/etc/apptainer
-          key: apptainer-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}
-          restore-keys: |
-            apptainer-${{ matrix.os }}-
-
-      - name: Install Apptainer (if not cached)
-        if: steps.cache-apptainer.outputs.cache-hit != 'true'
+      - name: Install Apptainer
         uses: eWaterCycle/setup-apptainer@v2
         with:
           apptainer-version: ${{ env.APPTAINER_VERSION }}
@@ -213,56 +182,36 @@ jobs:
   #       name: [regression, opencl, cache, config1, config2, debug, scope, stress, synthesis, vm, vector, cupbop, tensor]
   #       xlen: [32, 64]
   #   runs-on: ${{ matrix.os }}
-
+  #
   #   env:
   #     GITHUB_WORKSPACE: ${{ github.workspace }}
+  #     APPTAINER_VERSION: "1.4.3"
   #     APPTAINER_BASE_CMD: >
   #       apptainer exec --cleanenv
   #       --bind ${{ github.workspace }}:${{ github.workspace }}
   #       --pwd ${{ github.workspace }}
   #       demo.sif
-
+  #
   #   steps:
   #     - uses: actions/checkout@v4
-
-  #     - name: Restore Apptainer cache
-  #       id: cache-apptainer
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: |
-  #           /usr/local/bin/apptainer
-  #           /usr/local/libexec/apptainer
-  #           /usr/local/etc/apptainer
-  #         key: apptainer-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}
-  #         restore-keys: |
-  #           apptainer-${{ matrix.os }}-
-
-  #     - name: Install Apptainer (if not cached)
-  #       if: steps.cache-apptainer.outputs.cache-hit != 'true'
+  #
+  #     - name: Install Apptainer
   #       uses: eWaterCycle/setup-apptainer@v2
   #       with:
   #         apptainer-version: ${{ env.APPTAINER_VERSION }}
-
+  #
   #     - name: Download .sif image
   #       uses: actions/download-artifact@v4
   #       with:
   #         name: apptainer-image-${{ matrix.os }}
   #         path: .
-
-  #     - name: Restore caches
-  #       uses: actions/cache/restore@v4
-  #       with:
-  #         path: |
-  #           tools
-  #           third_party
-  #         key: cache-${{ matrix.os }}
-
+  #
   #     - name: Download Build Artifact
   #       uses: actions/download-artifact@v4
   #       with:
   #         name: build-${{ matrix.os }}-${{ matrix.xlen }}
   #         path: build${{ matrix.xlen }}
-
+  #
   #     - name: Run Tests inside container
   #       run: |
   #         $APPTAINER_BASE_CMD bash -c "
