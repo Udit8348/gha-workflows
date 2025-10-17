@@ -151,7 +151,8 @@ jobs:
               make software -s
               make tests -s
 
-              ls -al ${{ github.workspace }}/tests/regression/dogfood
+              echo "check if we had a productive build"
+              ls -al ${{ github.workspace }}/build${{ matrix.xlen }}/tests/regression/dogfood
           EOF
 
   complete:
