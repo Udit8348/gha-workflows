@@ -127,9 +127,7 @@ jobs:
               echo "--- Source Toolchain ---"
               source ../ci/toolchain_env.sh
 
-              which ccache
-              ccache --version
-              verilator --version
+              export PATH="$PATH:/usr/bin"
 
               echo "--- Starting build ---"
               make software -s
