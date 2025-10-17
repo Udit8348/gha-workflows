@@ -7,14 +7,20 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
+        xlen: [32]
     runs-on: ${{ matrix.os }}
 
     env:
+      GITHUB_WORKSPACE: ${{ github.workspace }}
       APPTAINER_VERSION: "1.4.3"
+      APPTAINER_BASE_CMD: apptainer exec --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
+      TOOLDIR: ${{ github.workspace }}/tools
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Restore cached .sif image
         id: cache-sif
@@ -44,24 +50,11 @@ jobs:
           path: demo.sif
           key: sif-${{ matrix.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
 
-      - name: Upload .sif as artifact (for dependent jobs)
-        uses: actions/upload-artifact@v4
-        with:
-          name: apptainer-image-${{ matrix.os }}
-          path: demo.sif
-
-  setup:
-    needs: apptainer-build
-    strategy:
-      matrix:
-        os: [ubuntu-22.04]
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout code (with submodules)
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      # - name: Upload .sif as artifact (for dependent jobs)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: apptainer-image-${{ matrix.os }}
+      #     path: demo.sif
 
       - name: Restore toolchain cache
         id: cache-toolchain
@@ -85,6 +78,7 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           echo "Cache miss: building toolchain..."
+          echo \$TOOLDIR
           TOOLDIR=$PWD/tools
           mkdir -p build
           cd build
@@ -110,82 +104,49 @@ jobs:
           path: third_party
           key: ${{ matrix.os }}-thirdparty-v0.1
 
-  build:
-    needs: [apptainer-build, setup]
-    strategy:
-      matrix:
-        os: [ubuntu-22.04]
-        xlen: [32]
-    runs-on: ${{ matrix.os }}
-
-    env:
-      GITHUB_WORKSPACE: ${{ github.workspace }}
-      APPTAINER_VERSION: "1.4.3"
-      APPTAINER_BASE_CMD: apptainer exec --bind ${{ github.workspace }}:${{ github.workspace }} --pwd ${{ github.workspace }}
-      TOOLDIR: ${{ github.workspace }}/tools
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
-        with:
-          apptainer-version: ${{ env.APPTAINER_VERSION }}
-
-      - name: Download .sif image
-        uses: actions/download-artifact@v4
-        with:
-          name: apptainer-image-${{ matrix.os }}
-          path: .
-
-      # - name: Setup tmate session
-        # uses: mxschmitt/action-tmate@v3
-
       - name: Run Build inside container
         run: |
-          $APPTAINER_BASE_CMD \
-            --env TOOLDIR=$TOOLDIR \
-            demo.sif bash -c "
-              set -e
-              echo '--- Inside container ---'
-              echo 'PWD before setting TOOLDIR:' \$PWD
-              TOOLDIR=\$PWD/tools
-              echo 'TOOLDIR set to:' \$TOOLDIR
+          "$APPTAINER_BASE_CMD" \
+            --bind "${{ github.workspace }}/tools:${{ github.workspace }}/tools" \
+            --bind "${{ github.workspace }}/third_party:${{ github.workspace }}/third_party" \
+            --env TOOLDIR="$TOOLDIR" \
+            demo.sif bash <<'EOF'
+            set -e
+            echo "--- Inside container ---"
+            echo "PWD before setting TOOLDIR: $PWD"
+            TOOLDIR=$PWD/tools
+            echo "TOOLDIR set to: $TOOLDIR"
 
-              echo 'do a non build folder conf jic'
-              ./configure --tooldir=\$TOOLDIR --xlen=32
+            echo "outer config"
+            ./configure --tooldir=$TOOLDIR --xlen=32
 
-              mkdir -p build32
-              cd build32
-              echo 'PWD after cd:' \$PWD
+            mkdir -p build32
+            cd build32
+            echo "PWD after cd: $PWD"
 
-              ../configure --tooldir=\$TOOLDIR --xlen=32
+            ../configure --tooldir=$TOOLDIR --xlen=32
 
-              echo 'Listing current directory:' 
-              ls -al ./
-              echo 'Listing parent directory:' 
-              ls -al ../
-              echo 'Contents of ../ci:' 
-              ls -al ../ci
+            echo "Listing current directory:"
+            ls -al ./
+            echo "Listing parent directory:"
+            ls -al ../
+            echo "Contents of ../ci:"
+            ls -al ../ci
 
+            echo "Current TOOLDIR"
+            echo $TOOLDIR
 
-              echo 'Current TOOLDIR'
-              echo \$TOOLDIR
+            echo "Contents of TOOLDIR"
+            ls $TOOLDIR
 
-              echo 'Contents of TOOLDIR'
-              ls \$TOOLDIR
-              
-              echo 'Contents of tool (hardcoded)'
-              ls /home/runner/work/gha-workflows/gha-workflows/tools/
+            echo "--- Sourcing toolchain_env.sh ---"
+            cat ../ci/toolchain_env.sh
+            source ../ci/toolchain_env.sh
 
-              echo '--- Sourcing toolchain_env.sh ---'
-              cat ../ci/toolchain_env.sh
-              source ../ci/toolchain_env.sh
-
-              echo '--- Starting build ---'
-              make software -s
-              make tests -s
-            "
+            echo "--- Starting build ---"
+            make software -s
+            make tests -s
+          EOF
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -249,7 +210,7 @@ jobs:
 
   complete:
     runs-on: ubuntu-22.04
-    needs: [apptainer-build, setup, build]
+    needs: [apptainer-build]
     steps:
       - name: Check Completion
         run: echo "✅ All matrix jobs passed successfully."
