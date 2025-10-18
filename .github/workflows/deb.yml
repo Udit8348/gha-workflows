@@ -17,13 +17,26 @@ jobs:
   apptainer:
     runs-on: ubuntu-22.04
 
+    env:
+      APPTAINER_VERSION: "1.4.3"
+
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Restore cached .sif image
+        id: cache-sif
+        uses: actions/cache@v4
+        with:
+          path: demo.sif
+          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
+          restore-keys: |
+            sif-${{ runner.os }}-
 
       - name: Install Apptainer
-        uses: eWaterCycle/setup-apptainer@v2 # from: https://github.com/marketplace/actions/setup-apptainer
+        uses: eWaterCycle/setup-apptainer@v2
         with:
-          apptainer-version: "1.3.6"
+          apptainer-version: ${{ env.APPTAINER_VERSION }}
 
       - name: Verify definition file
         run: |
@@ -34,21 +47,24 @@ jobs:
           echo "Using:"
           realpath container.def
 
-      - name: Build container
-        if: ${{ inputs.build_from_scratch == 'true' }}
-        # actions will open your repo from its root
-        # this means the top-level directory of the repo after actions/checkout (above) runs
-        # with this in mind, set your .def / .sif paths accordingly
+      - name: Build container (if no cache hit)
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
         run: |
-            apptainer build demo.sif container.def
+          echo "Cache miss — building demo.sif..."
+          apptainer build demo.sif container.def
 
-      - name: Use existing container
-        if: ${{ inputs.build_from_scratch == 'false' }}
+      - name: Use cached container
+        if: ${{ steps.cache-sif.outputs.cache-hit == 'true' }}
         run: |
-          if [ ! -f demo.sif ]; then
-            echo "demo.sif not found"
-            exit 1
-          fi
+          echo "Cache hit — using existing demo.sif"
+          ls -lh demo.sif
+
+      - name: Save .sif image to cache
+        if: ${{ steps.cache-sif.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: demo.sif
+          key: sif-${{ runner.os }}-${{ env.APPTAINER_VERSION }}-${{ hashFiles('container.def', 'install_boost_openssl.sh', '*.deb') }}
 
       - name: Run inside container
         run: |
